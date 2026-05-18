@@ -1,1 +1,622 @@
-a
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="manifest.json">
+    <title>Inventario Lonchería Azalea</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { background: #f3f4f6; font-family: system-ui, sans-serif; padding: 12px; margin: 0; }
+        .card { background: white; border-radius: 20px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        .btn { padding: 10px 16px; border-radius: 40px; font-weight: 600; font-size: 13px; cursor: pointer; border: none; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-accent { background: #f97316; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-gray { background: #e5e7eb; color: #374151; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-sheets { background: #0F9D58; color: white; }
+        .kpi-card { padding: 12px; border-radius: 16px; color: white; text-align: center; }
+        .edit-panel { background: #f0fdf4; border: 2px solid #10b981; border-radius: 20px; padding: 16px; margin-bottom: 16px; }
+        .hidden-panel { display: none; }
+        .category-chip { display: inline-block; padding: 6px 14px; background: #f3f4f6; border-radius: 40px; font-size: 12px; margin: 3px; cursor: pointer; }
+        .category-chip.active { background: #f97316; color: white; }
+        .low-stock { background: #fffbeb; border-left: 4px solid #f97316; }
+        .high-margin { background: #ecfdf5; border-left: 4px solid #10b981; }
+        .table-wrapper { overflow-x: auto; border-radius: 16px; border: 1px solid #e5e7eb; background: white; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 850px; }
+        th, td { padding: 10px 6px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        th { background: #f8fafc; font-weight: 600; cursor: pointer; }
+        input, select { border: 1px solid #d1d5db; border-radius: 10px; padding: 8px 10px; font-size: 13px; width: 100%; }
+        .grid-2 { display: grid; grid-template-columns: 1fr; gap: 12px; }
+        @media (min-width: 640px) { .grid-2 { grid-template-columns: repeat(2, 1fr); } }
+        .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        @media (min-width: 640px) { .stats-grid { grid-template-columns: repeat(6, 1fr); } }
+        .graficas-container { display: grid; grid-template-columns: 1fr; gap: 16px; }
+        @media (min-width: 768px) { .graficas-container { grid-template-columns: repeat(2, 1fr); } }
+        @media (min-width: 1024px) { .graficas-container { grid-template-columns: repeat(3, 1fr); } }
+        .margin-positive { color: #10b981; font-weight: bold; }
+        .margin-negative { color: #ef4444; font-weight: bold; }
+        .sucursal-selector { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .badge-sucursal { background: #e0e7ff; color: #3730a3; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .install-banner { background: #10b981; color: white; padding: 12px; text-align: center; border-radius: 12px; margin-bottom: 16px; display: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="max-w-7xl mx-auto">
+    <div id="installBanner" class="install-banner">📱 Instalar esta app en tu tablet → Tap aquí</div>
+
+    <!-- Header -->
+    <div class="card">
+        <div class="flex flex-wrap justify-between items-center gap-3">
+            <div><h1 class="text-2xl font-bold text-gray-800">📦 Inventario Lonchería Azalea</h1><p class="text-xs text-gray-500">Multi Sucursal · Precios por tienda</p></div>
+            <div class="flex gap-2 flex-wrap">
+                <button onclick="enviarAGoogleSheets()" class="btn btn-sheets">📤 Enviar a Sheets</button>
+                <button onclick="mostrarModalPDF()" class="btn btn-danger">📑 PDF</button>
+                <button onclick="exportarExcel()" class="btn btn-success">📊 Excel</button>
+                <button onclick="exportarBackup()" class="btn btn-primary">☁️ Backup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="stats-grid mb-4">
+        <div class="kpi-card bg-blue-600"><p class="text-xs">💰 Valor Costo</p><p id="kpiValor" class="text-xl font-bold">$0</p></div>
+        <div class="kpi-card bg-green-600"><p class="text-xs">💵 Valor Venta</p><p id="kpiVenta" class="text-xl font-bold">$0</p></div>
+        <div class="kpi-card bg-emerald-700"><p class="text-xs">📈 Ganancia Potencial</p><p id="kpiGanancia" class="text-xl font-bold">$0</p></div>
+        <div class="kpi-card bg-orange-500"><p class="text-xs">⚠️ Stock Bajo</p><p id="kpiStockBajo" class="text-xl font-bold">0</p></div>
+        <div class="kpi-card bg-purple-600"><p class="text-xs">🏷️ Productos</p><p id="kpiProductos" class="text-xl font-bold">0</p></div>
+        <div class="kpi-card" style="background: linear-gradient(135deg, #f093fb, #f5576c);"><p class="text-xs">💸 Estancado</p><p id="kpiEstancado" class="text-xl font-bold">$0</p></div>
+    </div>
+
+    <!-- Configuración -->
+    <div class="card">
+        <div class="grid-2 mb-3">
+            <input type="date" id="fechaInv" class="border rounded-xl p-2">
+            <input type="text" id="responsableInv" placeholder="Responsable" class="border rounded-xl p-2">
+        </div>
+        <div class="sucursal-selector">
+            <label>🏪 Sucursal para inventario:</label>
+            <select id="sucursalSelect" class="border rounded-xl p-2" onchange="cambiarSucursal()">
+                <option value="">--- Selecciona una sucursal ---</option>
+            </select>
+            <span id="sucursalBadge" class="badge-sucursal">No seleccionada</span>
+        </div>
+    </div>
+
+    <!-- Acciones -->
+    <div class="card flex flex-wrap gap-2">
+        <button onclick="mostrarPanelAgregar()" class="btn btn-accent">➕ Agregar Producto</button>
+        <button onclick="gestionarCategorias()" class="btn btn-primary">🏷️ Editar Categorías</button>
+        <label class="btn btn-primary cursor-pointer">📂 Cargar CSV <input type="file" id="csvFile" accept=".csv" hidden onchange="cargarCSV(event)"></label>
+        <button onclick="toggleGraficas()" id="btnToggleGraficas" class="btn btn-gray">📊 Ocultar Gráficas</button>
+        <button onclick="limpiarTodo()" class="btn btn-danger">🗑️ Limpiar Todo</button>
+    </div>
+
+    <!-- Buscador -->
+    <div class="card bg-blue-50">
+        <input type="text" id="buscador" placeholder="🔍 Buscar producto por nombre..." class="w-full p-3 border rounded-xl text-sm" autocomplete="off" oninput="buscarProducto()">
+        <div id="resultadosBusqueda" class="absolute z-50 bg-white border rounded-xl shadow-lg max-h-64 overflow-auto hidden"></div>
+        <p id="estadoCSV" class="text-xs text-gray-500 mt-2">💡 Carga CSV de Loyverse - detectará automáticamente las sucursales y sus precios</p>
+    </div>
+
+    <!-- Panel para agregar producto -->
+    <div id="panelEdicion" class="edit-panel hidden-panel">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="font-bold text-green-700">✏️ Nuevo Producto</h3>
+            <button onclick="cerrarPanel()" class="text-gray-500 text-2xl">✕</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div><label class="text-xs font-bold">Nombre *</label><input type="text" id="editNombre" class="w-full"></div>
+            <div><label class="text-xs font-bold">Categoría</label><select id="editCategoria" class="w-full"></select></div>
+            <div><label class="text-xs font-bold">Cantidad *</label><input type="number" id="editCantidad" step="0.01" class="w-full" oninput="actualizarPreview()"></div>
+            <div><label class="text-xs font-bold">Stock Mínimo (0 = sin alerta)</label><input type="number" id="editStockMin" class="w-full" value="0" step="1"></div>
+            <div><label class="text-xs font-bold">Costo (CPP) $</label><input type="number" id="editCosto" step="0.01" class="w-full" oninput="actualizarPreview()"></div>
+            <div><label class="text-xs font-bold">Precio Venta (PVP) $</label><input type="number" id="editPvp" step="0.01" class="w-full" oninput="actualizarPreview()"></div>
+            <div><label class="text-xs font-bold">Código Barras</label><input type="text" id="editCodigo" class="w-full"></div>
+            <div class="bg-gray-50 p-2 rounded-lg"><p class="text-xs text-gray-600">📊 Margen estimado:</p><p id="previewMargen" class="font-bold text-lg">$0 (0%)</p></div>
+        </div>
+        <div class="bg-white p-2 rounded-xl mt-2 text-center text-sm"><p>💰 Valor Costo: <span id="previewCostoTotal" class="font-bold text-blue-600">$0</span> | 💵 Valor Venta: <span id="previewVentaTotal" class="font-bold text-green-600">$0</span></p></div>
+        <button onclick="agregarProducto()" class="w-full bg-green-600 text-white py-3 rounded-xl font-bold mt-3">✅ Agregar al Inventario</button>
+    </div>
+
+    <!-- GRÁFICAS -->
+    <div id="seccionGraficas" class="graficas-container">
+        <div class="card"><h3 class="font-bold text-gray-700 mb-2 text-center">📊 Top productos (más inversión)</h3><div class="h-56"><canvas id="graficaBarras"></canvas></div></div>
+        <div class="card"><h3 class="font-bold text-gray-700 mb-2 text-center">🥧 Inversión por categoría</h3><div class="h-56"><canvas id="graficaPastel"></canvas></div></div>
+        <div class="card"><h3 class="font-bold text-gray-700 mb-2 text-center">📈 Top productos por margen (%)</h3><div class="h-56"><canvas id="graficaMargenes"></canvas></div></div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card"><h3 class="font-bold text-gray-700 text-sm mb-2">📁 Filtrar por categoría</h3><div id="filtrosCategorias" class="flex flex-wrap gap-2"></div></div>
+
+    <!-- Tabla -->
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr><th onclick="ordenarPor('nombre')">📦 Producto <span class="sort-icon" id="sort-nombre">↕️</span></th>
+                    <th onclick="ordenarPor('categoria')">📁 Categoría <span class="sort-icon" id="sort-categoria">↕️</span></th>
+                    <th onclick="ordenarPor('cantidad')" class="text-right">📊 Cantidad <span class="sort-icon" id="sort-cantidad">↕️</span></th>
+                    <th onclick="ordenarPor('stockMin')" class="text-right">⚠️ Stock Mín <span class="sort-icon" id="sort-stockMin">↕️</span></th>
+                    <th onclick="ordenarPor('cpp')" class="text-right">💰 CPP <span class="sort-icon" id="sort-cpp">↕️</span></th>
+                    <th onclick="ordenarPor('pvp')" class="text-right">💵 PVP <span class="sort-icon" id="sort-pvp">↕️</span></th>
+                    <th onclick="ordenarPor('margen')" class="text-right">📈 Margen <span class="sort-icon" id="sort-margen">↕️</span></th>
+                    <th onclick="ordenarPor('valor')" class="text-right bg-blue-50">💰 Valor Costo <span class="sort-icon" id="sort-valor">↕️</span></th>
+                    <th onclick="ordenarPor('valorVenta')" class="text-right bg-green-50">💵 Valor Venta <span class="sort-icon" id="sort-valorVenta">↕️</span></th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="tablaInventario"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modales -->
+<div id="modalPDF" class="fixed inset-0 bg-black bg-opacity-75 hidden z-50 flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 max-h-[90vh] overflow-auto">
+        <h3 class="text-xl font-bold mb-4">📑 Personalizar PDF</h3>
+        <div class="space-y-2"><div class="flex items-center gap-3"><input type="checkbox" id="incluirGraficas" checked> <label>Gráficas</label></div>
+        <div class="flex items-center gap-3"><input type="checkbox" id="incluirMargenes" checked> <label>Gráfica de márgenes</label></div>
+        <div class="flex items-center gap-3"><input type="checkbox" id="incluirKPIs" checked> <label>KPIs</label></div>
+        <div class="flex items-center gap-3"><input type="checkbox" id="colProducto" checked> <label>Producto</label></div>
+        <div class="flex items-center gap-3"><input type="checkbox" id="colCategoria" checked> <label>Categoría</label></div>
+        <div class="flex items-center gap-3"><input type="checkbox" id="colCantidad" checked> <label>Cantidad</label></div>
+        <div class="flex items-center gap-3"><input type="checkbox" id="colCPP" checked> <label>CPP</label></div>
+        <div class="flex items-center gap-3"><input type="checkbox" id="colPVP" checked> <label>PVP</label></div>
+        <div class="flex items-center gap-3"><input type="checkbox" id="colMargen" checked> <label>Margen</label></div>
+        <div class="flex items-center gap-3"><input type="checkbox" id="colValorCosto" checked> <label>Valor Costo</label></div>
+        <div class="flex items-center gap-3"><input type="checkbox" id="colValorVenta" checked> <label>Valor Venta</label></div></div>
+        <div class="mt-6 flex gap-3"><button onclick="generarPDFPersonalizado()" class="flex-1 btn btn-primary">✅ Generar PDF</button><button onclick="cerrarModalPDF()" class="flex-1 btn btn-gray">Cancelar</button></div>
+    </div>
+</div>
+
+<div id="modalCategorias" class="fixed inset-0 bg-black bg-opacity-75 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 max-h-[80vh] overflow-auto">
+        <div class="flex justify-between mb-4"><h3 class="text-xl font-bold">🏷️ Categorías</h3><button onclick="cerrarModalCats()" class="text-gray-500 text-xl">✕</button></div>
+        <div id="listaCategorias" class="space-y-2 mb-4 max-h-64 overflow-y-auto"></div>
+        <div class="flex gap-2"><input type="text" id="nuevaCategoria" placeholder="Nueva categoría" class="border rounded-xl p-2 flex-1"><button onclick="agregarNuevaCategoria()" class="bg-accent text-white px-4 rounded-xl">+ Agregar</button></div>
+        <button onclick="cerrarModalCats()" class="w-full bg-gray-200 py-2 rounded-xl mt-4">Cerrar</button>
+    </div>
+</div>
+
+<script>
+// ==================== DATOS GLOBALES ====================
+let inventario = [];
+let categorias = ['Refrescos', 'Sabritas', 'Dulces', 'Insumos', 'Almacén', 'Bebidas', 'Comida'];
+let catalogo = [];
+let sucursalesDisponibles = [];
+let sucursalActual = '';
+let filtroActual = 'ALL';
+let graficasVisible = true;
+let chartBarras = null, chartPastel = null, chartMargenes = null;
+let ordenCampo = 'nombre';
+let ordenDireccion = 'asc';
+
+const STORAGE_INV = 'inventario_sucursal_v1';
+const STORAGE_CATS = 'categorias_sucursal_v1';
+const STORAGE_CATALOG = 'catalogo_sucursal_v1';
+const STORAGE_SUCURSAL = 'sucursal_actual';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwPMXnHG_hc0jcbDcsMVNyinK5GDuY4W93WpR4f8EVdiQiwFi9TubvQ6EZ5Z2nxemc/exec';
+
+// ==================== GOOGLE SHEETS ====================
+window.enviarAGoogleSheets = async function() {
+    if (inventario.length === 0) { alert('No hay productos para enviar'); return; }
+    if (!sucursalActual) { alert('Selecciona una sucursal primero'); return; }
+    
+    const data = {
+        inventario: inventario.map(p => ({
+            nombre: p.nombre,
+            categoria: p.categoria,
+            cantidad: p.cantidad,
+            cpp: p.cpp || calcularCPP(p.historial),
+            pvp: p.pvp || 0
+        })),
+        fecha: document.getElementById('fechaInv').value,
+        sucursal: sucursalActual,
+        responsable: document.getElementById('responsableInv').value || 'No especificado'
+    };
+    
+    try {
+        const response = await fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        alert('✅ Inventario enviado a Google Sheets correctamente');
+    } catch(error) {
+        alert('❌ Error al enviar: ' + error.message);
+    }
+};
+
+// ==================== INICIALIZACIÓN ====================
+function cargarDatos() {
+    const invGuardado = localStorage.getItem(STORAGE_INV);
+    if (invGuardado) inventario = JSON.parse(invGuardado);
+    const catsGuardado = localStorage.getItem(STORAGE_CATS);
+    if (catsGuardado) categorias = JSON.parse(catsGuardado);
+    const catalogGuardado = localStorage.getItem(STORAGE_CATALOG);
+    if (catalogGuardado) {
+        if (catalogGuardado.sucursales) sucursalesDisponibles = catalogGuardado.sucursales;
+        if (catalogGuardado.productos) catalogo = catalogGuardado.productos;
+        else catalogo = catalogGuardado;
+    }
+    const sucGuardada = localStorage.getItem(STORAGE_SUCURSAL);
+    if (sucGuardada && sucursalesDisponibles.includes(sucGuardada)) {
+        sucursalActual = sucGuardada;
+        document.getElementById('sucursalSelect').value = sucursalActual;
+        document.getElementById('sucursalBadge').innerHTML = sucursalActual;
+    }
+    document.getElementById('fechaInv').value = new Date().toISOString().slice(0,10);
+    actualizarSelectCategorias();
+    refrescarTodo();
+}
+
+function guardarInventario() {
+    localStorage.setItem(STORAGE_INV, JSON.stringify(inventario));
+    refrescarTodo();
+}
+
+function actualizarSelectCategorias() {
+    const s = document.getElementById('editCategoria');
+    if(s) s.innerHTML = categorias.map(c => `<option value="${c.replace(/"/g, '&quot;')}">${c}</option>`).join('');
+}
+
+function refrescarTodo() {
+    actualizarKPIs();
+    dibujarGraficaBarras();
+    dibujarGraficaPastel();
+    dibujarGraficaMargenes();
+    dibujarTabla();
+    dibujarFiltros();
+}
+
+function calcularCPP(historial) { if (!historial || historial.length === 0) return 0; let tv = 0, tq = 0; historial.forEach(h => { tv += h.cant * h.costo; tq += h.cant; }); return tq > 0 ? tv / tq : 0; }
+function formatoMoneda(n) { return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n || 0); }
+function calcularMargen(costo, pvp) { return (pvp > 0 && costo > 0) ? ((pvp - costo) / pvp * 100) : 0; }
+
+function actualizarKPIs() {
+    let vc = 0, vv = 0, sb = 0, es = 0;
+    inventario.forEach(p => {
+        const cpp = p.cpp || calcularCPP(p.historial);
+        const ct = p.cantidad * cpp;
+        const vt = p.cantidad * (p.pvp || 0);
+        vc += ct; vv += vt;
+        if (p.stockMin > 0 && p.cantidad <= p.stockMin) sb++;
+        if (p.cantidad > (p.stockMin || 0) * 3) es += ct;
+    });
+    document.getElementById('kpiValor').innerHTML = formatoMoneda(vc);
+    document.getElementById('kpiVenta').innerHTML = formatoMoneda(vv);
+    document.getElementById('kpiGanancia').innerHTML = formatoMoneda(vv - vc);
+    document.getElementById('kpiStockBajo').innerHTML = sb;
+    document.getElementById('kpiProductos').innerHTML = inventario.length;
+    document.getElementById('kpiEstancado').innerHTML = formatoMoneda(es);
+}
+
+function dibujarGraficaBarras() {
+    const ctx = document.getElementById('graficaBarras').getContext('2d');
+    if (chartBarras) chartBarras.destroy();
+    const datos = inventario.map(p => ({ nombre: p.nombre.length > 20 ? p.nombre.slice(0,17)+'...' : p.nombre, valor: p.cantidad * (p.cpp || calcularCPP(p.historial)) })).sort((a,b) => b.valor - a.valor).slice(0, 6);
+    if (datos.length === 0) { ctx.canvas.parentElement.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400">Sin datos</div>'; return; }
+    ctx.canvas.parentElement.innerHTML = '<canvas id="graficaBarras" class="h-56"></canvas>';
+    chartBarras = new Chart(document.getElementById('graficaBarras'), { type: 'bar', data: { labels: datos.map(d => d.nombre), datasets: [{ label: 'Inversión ($)', data: datos.map(d => d.valor), backgroundColor: '#3b82f6' }] }, options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'bottom' } }, scales: { y: { ticks: { callback: v => '$' + v.toLocaleString() } } } } });
+}
+
+function dibujarGraficaPastel() {
+    const ctx = document.getElementById('graficaPastel').getContext('2d');
+    if (chartPastel) chartPastel.destroy();
+    const valorPorCategoria = {};
+    inventario.forEach(p => { const cpp = p.cpp || calcularCPP(p.historial); const valor = p.cantidad * cpp; if (valor > 0) valorPorCategoria[p.categoria] = (valorPorCategoria[p.categoria] || 0) + valor; });
+    const cats = Object.keys(valorPorCategoria);
+    if (cats.length === 0) { ctx.canvas.parentElement.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400">Sin datos</div>'; return; }
+    ctx.canvas.parentElement.innerHTML = '<canvas id="graficaPastel" class="h-56"></canvas>';
+    chartPastel = new Chart(document.getElementById('graficaPastel'), { type: 'doughnut', data: { labels: cats, datasets: [{ data: cats.map(c => valorPorCategoria[c]), backgroundColor: ['#3b82f6','#10b981','#f97316','#ef4444','#8b5cf6','#ec4899'] }] }, options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 9 } } } } } });
+}
+
+function dibujarGraficaMargenes() {
+    const ctx = document.getElementById('graficaMargenes').getContext('2d');
+    if (chartMargenes) chartMargenes.destroy();
+    const datos = inventario.filter(p => p.pvp > 0 && (p.cpp || calcularCPP(p.historial)) > 0).map(p => ({ nombre: p.nombre.length > 20 ? p.nombre.slice(0,17)+'...' : p.nombre, margen: calcularMargen(p.cpp || calcularCPP(p.historial), p.pvp) })).sort((a,b) => b.margen - a.margen).slice(0, 6);
+    if (datos.length === 0) { ctx.canvas.parentElement.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400">Sin datos de PVP</div>'; return; }
+    ctx.canvas.parentElement.innerHTML = '<canvas id="graficaMargenes" class="h-56"></canvas>';
+    chartMargenes = new Chart(document.getElementById('graficaMargenes'), { type: 'bar', data: { labels: datos.map(d => d.nombre), datasets: [{ label: 'Margen (%)', data: datos.map(d => d.margen), backgroundColor: '#10b981' }] }, options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: ctx => ctx.raw.toFixed(1) + '%' } } }, scales: { y: { ticks: { callback: v => v + '%' } } } } });
+}
+
+window.toggleGraficas = function() { const s = document.getElementById('seccionGraficas'); const b = document.getElementById('btnToggleGraficas'); if (graficasVisible) { s.style.display = 'none'; b.innerHTML = '📊 Mostrar Gráficas'; b.classList.remove('btn-gray'); b.classList.add('btn-primary'); graficasVisible = false; } else { s.style.display = 'grid'; b.innerHTML = '📊 Ocultar Gráficas'; b.classList.remove('btn-primary'); b.classList.add('btn-gray'); graficasVisible = true; setTimeout(() => { dibujarGraficaBarras(); dibujarGraficaPastel(); dibujarGraficaMargenes(); }, 50); } };
+function ordenarPor(campo) { if (ordenCampo === campo) ordenDireccion = ordenDireccion === 'asc' ? 'desc' : 'asc'; else { ordenCampo = campo; ordenDireccion = 'asc'; } document.querySelectorAll('.sort-icon').forEach(icon => icon.innerHTML = '↕️'); const icono = document.getElementById(`sort-${campo}`); if (icono) icono.innerHTML = ordenDireccion === 'asc' ? '↑' : '↓'; dibujarTabla(); }
+
+window.mostrarPanelAgregar = function() {
+    document.getElementById('editNombre').value = ''; document.getElementById('editCosto').value = ''; document.getElementById('editPvp').value = '';
+    document.getElementById('editCodigo').value = ''; document.getElementById('editCantidad').value = ''; document.getElementById('editStockMin').value = 0;
+    document.getElementById('panelEdicion').classList.remove('hidden-panel'); document.getElementById('editNombre').focus(); actualizarPreview();
+};
+window.cerrarPanel = function() { document.getElementById('panelEdicion').classList.add('hidden-panel'); document.getElementById('buscador').value = ''; document.getElementById('resultadosBusqueda').style.display = 'none'; };
+window.actualizarPreview = function() {
+    const cant = parseFloat(document.getElementById('editCantidad').value) || 0;
+    const costo = parseFloat(document.getElementById('editCosto').value) || 0;
+    const pvp = parseFloat(document.getElementById('editPvp').value) || 0;
+    const margenMoneda = (pvp - costo) * cant;
+    const margenPorcentaje = pvp > 0 ? ((pvp - costo) / pvp * 100) : 0;
+    document.getElementById('previewCostoTotal').innerHTML = formatoMoneda(cant * costo);
+    document.getElementById('previewVentaTotal').innerHTML = formatoMoneda(cant * pvp);
+    document.getElementById('previewMargen').innerHTML = `${formatoMoneda(margenMoneda)} (${margenPorcentaje.toFixed(1)}%)`;
+    document.getElementById('previewMargen').className = `font-bold text-lg ${margenPorcentaje >= 0 ? 'text-green-600' : 'text-red-600'}`;
+};
+window.agregarProducto = function() {
+    const nombre = document.getElementById('editNombre').value.trim();
+    const categoria = document.getElementById('editCategoria').value;
+    const cantidad = parseFloat(document.getElementById('editCantidad').value) || 0;
+    const stockMin = parseInt(document.getElementById('editStockMin').value) || 0;
+    const costo = parseFloat(document.getElementById('editCosto').value) || 0;
+    const pvp = parseFloat(document.getElementById('editPvp').value) || 0;
+    const codigo = document.getElementById('editCodigo').value.trim();
+    if (!nombre) { alert('❌ El nombre es obligatorio'); return; }
+    const hoy = new Date().toISOString().slice(0,10);
+    const existe = inventario.find(p => p.nombre.toLowerCase() === nombre.toLowerCase());
+    if (existe) {
+        if (confirm(`⚠️ "${nombre}" ya existe. ¿Sumar ${cantidad} unidades?`)) {
+            existe.cantidad += cantidad;
+            if (costo > 0 && cantidad > 0) { if (!existe.historial) existe.historial = []; existe.historial.push({ fecha: hoy, cant: cantidad, costo: costo }); }
+            existe.cpp = costo; existe.pvp = pvp; if (codigo) existe.codigo = codigo; if (stockMin >= 0) existe.stockMin = stockMin; if (categoria) existe.categoria = categoria;
+            guardarInventario(); cerrarPanel(); alert(`✅ Se sumaron ${cantidad} unidades a "${nombre}"`);
+        }
+    } else {
+        const nuevo = { id: Date.now().toString(), nombre: nombre, categoria: categoria || categorias[0], cantidad: cantidad, stockMin: stockMin, codigo: codigo, cpp: costo, pvp: pvp, historial: (costo > 0 && cantidad > 0) ? [{ fecha: hoy, cant: cantidad, costo: costo }] : [] };
+        inventario.push(nuevo); guardarInventario(); cerrarPanel(); alert(`✅ "${nombre}" agregado al inventario`);
+    }
+    document.getElementById('buscador').value = ''; document.getElementById('resultadosBusqueda').style.display = 'none';
+};
+
+// ==================== CSV CON DETECCIÓN DE SUCURSALES ====================
+window.cargarCSV = function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const texto = e.target.result;
+            const lineas = texto.split(/\r?\n/);
+            const headers = parseCSV(lineas[0]);
+            
+            const idxNombre = headers.findIndex(h => h && (h.toLowerCase() === 'nombre' || h.toLowerCase() === 'name'));
+            const idxCategoria = headers.findIndex(h => h && (h.toLowerCase() === 'categoria' || h.toLowerCase() === 'category'));
+            const idxCosto = headers.findIndex(h => h && (h.toLowerCase() === 'coste' || h.toLowerCase() === 'costo' || h.toLowerCase() === 'cost'));
+            const idxCodigo = headers.findIndex(h => h && (h.toLowerCase() === 'codigo de barras' || h.toLowerCase() === 'barcode' || h.toLowerCase() === 'codigo'));
+            
+            const sucursales = [];
+            const precioColumns = {};
+            headers.forEach((h, idx) => {
+                if (h && h.includes('Precio [')) {
+                    const match = h.match(/Precio \[(.*?)\]/);
+                    if (match) {
+                        const sucursal = match[1];
+                        if (!sucursales.includes(sucursal)) sucursales.push(sucursal);
+                        precioColumns[sucursal] = idx;
+                    }
+                }
+            });
+            
+            if (idxNombre === -1) throw new Error('No se encontró columna "Nombre"');
+            if (sucursales.length === 0) throw new Error('No se encontraron columnas de precio por sucursal');
+            
+            sucursalesDisponibles = sucursales;
+            const sucursalSelect = document.getElementById('sucursalSelect');
+            sucursalSelect.innerHTML = '<option value="">--- Selecciona una sucursal ---</option>' + sucursales.map(s => `<option value="${escapeHtml(s)}">🏪 ${escapeHtml(s)}</option>`).join('');
+            
+            const productos = [];
+            for (let i = 1; i < lineas.length; i++) {
+                const cols = parseCSV(lineas[i]);
+                if (cols[idxNombre] && cols[idxNombre].trim()) {
+                    const nombreProd = cols[idxNombre].trim();
+                    const catProd = idxCategoria >= 0 ? cols[idxCategoria]?.trim() : null;
+                    const costoProd = idxCosto >= 0 ? parseFloat((cols[idxCosto] || '0').replace(',', '.')) || 0 : 0;
+                    const preciosPorSucursal = {};
+                    sucursales.forEach(suc => {
+                        const colIdx = precioColumns[suc];
+                        preciosPorSucursal[suc] = colIdx !== undefined ? parseFloat((cols[colIdx] || '0').replace(',', '.')) || 0 : 0;
+                    });
+                    productos.push({
+                        nombre: nombreProd,
+                        categoria: catProd && catProd !== '' ? catProd : 'General',
+                        codigo: idxCodigo >= 0 ? (cols[idxCodigo]?.trim() || '') : '',
+                        costo: costoProd,
+                        precios: preciosPorSucursal
+                    });
+                    if (catProd && catProd !== '' && !categorias.includes(catProd)) categorias.push(catProd);
+                }
+            }
+            catalogo = productos;
+            localStorage.setItem(STORAGE_CATALOG, JSON.stringify({ sucursales: sucursalesDisponibles, productos: catalogo }));
+            localStorage.setItem(STORAGE_CATS, JSON.stringify(categorias));
+            actualizarSelectCategorias();
+            document.getElementById('estadoCSV').innerHTML = `✅ ${catalogo.length} productos cargados | 🏪 Sucursales: ${sucursales.join(', ')}`;
+            alert(`✅ Se cargaron ${catalogo.length} productos\n🏪 Sucursales detectadas:\n${sucursales.join('\n')}`);
+        } catch(err) {
+            document.getElementById('estadoCSV').innerHTML = '❌ Error: ' + err.message;
+            alert('Error al cargar CSV: ' + err.message);
+        }
+    };
+    reader.readAsText(file, 'UTF-8');
+    event.target.value = '';
+};
+
+function cambiarSucursal() {
+    sucursalActual = document.getElementById('sucursalSelect').value;
+    if (sucursalActual) {
+        document.getElementById('sucursalBadge').innerHTML = sucursalActual;
+        localStorage.setItem(STORAGE_SUCURSAL, sucursalActual);
+        if (catalogo && catalogo.length) {
+            catalogo = catalogo.map(p => ({
+                ...p,
+                precio: p.precios ? p.precios[sucursalActual] || 0 : 0
+            }));
+            localStorage.setItem(STORAGE_CATALOG, JSON.stringify({ sucursales: sucursalesDisponibles, productos: catalogo }));
+        }
+        alert(`🏪 Sucursal seleccionada: ${sucursalActual}`);
+    } else {
+        document.getElementById('sucursalBadge').innerHTML = 'No seleccionada';
+        localStorage.removeItem(STORAGE_SUCURSAL);
+    }
+}
+
+function parseCSV(linea) {
+    const resultado = [];
+    let entreComillas = false, actual = '';
+    for (let i = 0; i < linea.length; i++) {
+        const c = linea[i];
+        if (c === '"') {
+            if (entreComillas && linea[i+1] === '"') { actual += '"'; i++; }
+            else entreComillas = !entreComillas;
+        } else if (c === ',' && !entreComillas) {
+            resultado.push(actual);
+            actual = '';
+        } else {
+            actual += c;
+        }
+    }
+    resultado.push(actual);
+    return resultado;
+}
+
+// ==================== BÚSQUEDA ====================
+let timeoutBusqueda, resultadosActuales = [];
+window.buscarProducto = function() {
+    clearTimeout(timeoutBusqueda);
+    timeoutBusqueda = setTimeout(() => {
+        const texto = document.getElementById('buscador').value.toLowerCase();
+        const divRes = document.getElementById('resultadosBusqueda');
+        if (texto.length < 2) { divRes.style.display = 'none'; return; }
+        if (!sucursalActual) { divRes.innerHTML = '<div class="p-3 text-center text-orange-500">⚠️ Primero selecciona una sucursal</div>'; divRes.style.display = 'block'; return; }
+        const resultados = catalogo.filter(p => p.nombre.toLowerCase().includes(texto) || (p.codigo && p.codigo.toLowerCase().includes(texto))).slice(0, 15);
+        if (resultados.length === 0) { divRes.innerHTML = `<div class="p-3 text-center text-gray-500">❌ No encontrado. <button onclick="mostrarPanelAgregar()" class="text-orange-500 underline">Agregar manualmente</button></div>`; divRes.style.display = 'block'; return; }
+        divRes.innerHTML = resultados.map((p, idx) => `<div class="p-3 border-b hover:bg-blue-50 cursor-pointer" onclick="seleccionarProducto(${idx})"><div class="font-semibold">${escapeHtml(p.nombre)}</div><div class="text-xs text-gray-500 flex justify-between flex-wrap gap-1"><span>📁 ${escapeHtml(p.categoria || 'Sin categoría')}</span>${p.codigo ? `<span>📷 ${escapeHtml(p.codigo)}</span>` : ''}<span>💰 ${formatoMoneda(p.costo)} | 💵 ${formatoMoneda(p.precio || 0)}</span></div></div>`).join('');
+        divRes.style.display = 'block';
+        resultadosActuales = resultados;
+    }, 200);
+};
+
+window.seleccionarProducto = function(idx) {
+    const p = resultadosActuales[idx];
+    if (!p) return;
+    document.getElementById('resultadosBusqueda').style.display = 'none';
+    document.getElementById('buscador').value = '';
+    document.getElementById('editNombre').value = p.nombre;
+    document.getElementById('editCosto').value = p.costo;
+    document.getElementById('editPvp').value = p.precio || 0;
+    document.getElementById('editCodigo').value = p.codigo || '';
+    document.getElementById('editCantidad').value = '';
+    document.getElementById('editStockMin').value = 0;
+    const select = document.getElementById('editCategoria');
+    if (select.querySelector(`option[value="${p.categoria}"]`)) select.value = p.categoria;
+    else if (p.categoria && !categorias.includes(p.categoria)) { categorias.push(p.categoria); guardarCategorias(); actualizarSelectCategorias(); select.value = p.categoria; }
+    document.getElementById('panelEdicion').classList.remove('hidden-panel');
+    document.getElementById('editCantidad').focus();
+    actualizarPreview();
+};
+
+// ==================== TABLA ====================
+function dibujarTabla() {
+    const tbody = document.getElementById('tablaInventario');
+    let filtrados = filtroActual === 'ALL' ? [...inventario] : inventario.filter(p => p.categoria === filtroActual);
+    filtrados.sort((a, b) => {
+        let valA, valB;
+        switch(ordenCampo) {
+            case 'nombre': valA = a.nombre.toLowerCase(); valB = b.nombre.toLowerCase(); break;
+            case 'categoria': valA = a.categoria; valB = b.categoria; break;
+            case 'cantidad': valA = a.cantidad; valB = b.cantidad; break;
+            case 'stockMin': valA = a.stockMin || 0; valB = b.stockMin || 0; break;
+            case 'cpp': valA = a.cpp || calcularCPP(a.historial); valB = b.cpp || calcularCPP(b.historial); break;
+            case 'pvp': valA = a.pvp || 0; valB = b.pvp || 0; break;
+            case 'margen': valA = calcularMargen(a.cpp || calcularCPP(a.historial), a.pvp); valB = calcularMargen(b.cpp || calcularCPP(b.historial), b.pvp); break;
+            case 'valor': valA = a.cantidad * (a.cpp || calcularCPP(a.historial)); valB = b.cantidad * (b.cpp || calcularCPP(b.historial)); break;
+            case 'valorVenta': valA = a.cantidad * (a.pvp || 0); valB = b.cantidad * (b.pvp || 0); break;
+            default: return 0;
+        }
+        if (ordenDireccion === 'asc') return valA > valB ? 1 : -1;
+        else return valA < valB ? 1 : -1;
+    });
+    if (filtrados.length === 0) { tbody.innerHTML = `<tr><td colspan="10" class="text-center p-8 text-gray-400">No hay productos. Usa "Agregar Producto" o carga CSV</td></tr>`; return; }
+    tbody.innerHTML = filtrados.map(p => {
+        const cpp = p.cpp || calcularCPP(p.historial);
+        const pvp = p.pvp || 0;
+        const margen = calcularMargen(cpp, pvp);
+        const margenMoneda = (pvp - cpp) * p.cantidad;
+        const valorCosto = p.cantidad * cpp;
+        const valorVenta = p.cantidad * pvp;
+        const bajoStock = (p.stockMin || 0) > 0 && p.cantidad <= (p.stockMin || 0);
+        const altoMargen = margen > 30;
+        return `<tr class="${bajoStock ? 'low-stock' : ''} ${altoMargen && pvp > 0 ? 'high-margin' : ''}"><td><div class="font-medium">${escapeHtml(p.nombre)}</div>${p.codigo ? `<div class="text-[10px] text-gray-400">📷 ${escapeHtml(p.codigo)}</div>` : ''}</td>
+        <td><select onchange="actualizarCampo('${p.id}', 'categoria', this.value)" class="border rounded-lg p-1 text-xs w-28">${categorias.map(c => `<option ${p.categoria === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}</select></td>
+        <td class="text-right"><input type="number" value="${p.cantidad}" step="0.01" onchange="actualizarCampo('${p.id}', 'cantidad', this.value)" class="w-20 border rounded-lg p-1 text-right"></td>
+        <td class="text-right"><input type="number" value="${p.stockMin || 0}" onchange="actualizarCampo('${p.id}', 'stockMin', this.value)" class="w-16 border rounded-lg p-1 text-right"></td>
+        <td class="text-right"><input type="number" value="${cpp.toFixed(2)}" step="0.01" onchange="actualizarCampo('${p.id}', 'cpp', this.value)" class="w-24 border rounded-lg p-1 text-right"></td>
+        <td class="text-right"><input type="number" value="${pvp.toFixed(2)}" step="0.01" onchange="actualizarCampo('${p.id}', 'pvp', this.value)" class="w-24 border rounded-lg p-1 text-right"></td>
+        <td class="text-right ${margen >= 0 ? 'margin-positive' : 'margin-negative'}">${margen.toFixed(1)}%<br><span class="text-xs">(${formatoMoneda(margenMoneda)})</span></td>
+        <td class="text-right font-bold text-blue-700">${formatoMoneda(valorCosto)}</td>
+        <td class="text-right font-bold text-green-700">${formatoMoneda(valorVenta)}</td>
+        <td class="text-center"><button onclick="eliminarProducto('${p.id}')" class="text-red-500 text-lg">🗑️</button></td></tr>`;
+    }).join('');
+}
+window.actualizarCampo = function(id, campo, valor) { const idx = inventario.findIndex(p => p.id === id); if (idx >= 0) { let parsed = valor; if (campo === 'cantidad' || campo === 'stockMin') parsed = parseFloat(valor) || 0; if (campo === 'cpp' || campo === 'pvp') parsed = parseFloat(valor) || 0; inventario[idx][campo] = parsed; if (campo === 'cpp' && !inventario[idx].historial && parsed > 0) inventario[idx].historial = [{ fecha: new Date().toISOString().slice(0,10), cant: inventario[idx].cantidad || 1, costo: parsed }]; guardarInventario(); } };
+window.eliminarProducto = function(id) { if (confirm('¿Eliminar este producto?')) { inventario = inventario.filter(p => p.id !== id); guardarInventario(); } };
+function dibujarFiltros() { const container = document.getElementById('filtrosCategorias'); const conteos = {}; inventario.forEach(p => { conteos[p.categoria] = (conteos[p.categoria] || 0) + 1; }); let html = `<button onclick="setFiltro('ALL')" class="category-chip ${filtroActual === 'ALL' ? 'active' : ''}">📋 Todos (${inventario.length})</button>`; Object.keys(conteos).sort().forEach(cat => { html += `<button onclick="setFiltro('${escapeHtml(cat)}')" class="category-chip ${filtroActual === cat ? 'active' : ''}">${escapeHtml(cat)} (${conteos[cat]})</button>`; }); container.innerHTML = html; }
+window.setFiltro = function(cat) { filtroActual = cat; dibujarFiltros(); dibujarTabla(); };
+window.gestionarCategorias = function() { const container = document.getElementById('listaCategorias'); container.innerHTML = categorias.map(c => `<div class="flex justify-between items-center p-2 bg-gray-50 rounded-xl"><span>${escapeHtml(c)}</span><button onclick="eliminarCategoria('${escapeHtml(c)}')" class="text-red-500 px-2">🗑️</button></div>`).join(''); document.getElementById('modalCategorias').classList.remove('hidden'); };
+window.agregarNuevaCategoria = function() { const input = document.getElementById('nuevaCategoria'); const nueva = input.value.trim(); if (nueva && !categorias.includes(nueva)) { categorias.push(nueva); guardarCategorias(); input.value = ''; gestionarCategorias(); actualizarSelectCategorias(); } };
+window.eliminarCategoria = function(catEliminar) { if (categorias.length <= 1) { alert('Debe haber al menos una categoría'); return; } categorias = categorias.filter(c => c !== catEliminar); inventario.forEach(p => { if (p.categoria === catEliminar) p.categoria = categorias[0]; }); guardarCategorias(); guardarInventario(); gestionarCategorias(); actualizarSelectCategorias(); };
+window.cerrarModalCats = function() { document.getElementById('modalCategorias').classList.add('hidden'); };
+window.generarPDFPersonalizado = async function() {
+    const incluirGraficas = document.getElementById('incluirGraficas').checked;
+    const incluirMargenes = document.getElementById('incluirMargenes').checked;
+    const incluirKPIs = document.getElementById('incluirKPIs').checked;
+    const colProducto = document.getElementById('colProducto').checked;
+    const colCategoria = document.getElementById('colCategoria').checked;
+    const colCantidad = document.getElementById('colCantidad').checked;
+    const colCPP = document.getElementById('colCPP').checked;
+    const colPVP = document.getElementById('colPVP').checked;
+    const colMargen = document.getElementById('colMargen').checked;
+    const colValorCosto = document.getElementById('colValorCosto').checked;
+    const colValorVenta = document.getElementById('colValorVenta').checked;
+    const suc = sucursalActual || 'Sucursal';
+    const fecha = document.getElementById('fechaInv').value;
+    const resp = document.getElementById('responsableInv').value || 'No especificado';
+    const valorCosto = inventario.reduce((s, p) => s + p.cantidad * (p.cpp || calcularCPP(p.historial)), 0);
+    const valorVenta = inventario.reduce((s, p) => s + p.cantidad * (p.pvp || 0), 0);
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    let y = 20;
+    doc.setFontSize(16); doc.text('Reporte de Inventario', 14, y); y += 10;
+    doc.setFontSize(10);
+    doc.text(`Sucursal: ${suc} | Fecha: ${fecha} | Responsable: ${resp}`, 14, y); y += 7;
+    if (incluirKPIs) { doc.text(`Valor Costo: ${formatoMoneda(valorCosto)} | Valor Venta: ${formatoMoneda(valorVenta)} | Ganancia: ${formatoMoneda(valorVenta - valorCosto)}`, 14, y); y += 10; }
+    if (incluirGraficas) { const cb = document.getElementById('graficaBarras'); const cp = document.getElementById('graficaPastel'); if (cb && cb.toDataURL) { try { doc.addImage(cb.toDataURL('image/png'), 'PNG', 14, y, 85, 55); doc.addImage(cp.toDataURL('image/png'), 'PNG', 105, y, 85, 55); y += 60; } catch(e) {} } }
+    if (incluirMargenes) { const cm = document.getElementById('graficaMargenes'); if (cm && cm.toDataURL) { try { doc.addImage(cm.toDataURL('image/png'), 'PNG', 14, y, 180, 50); y += 55; } catch(e) {} } }
+    if (inventario.length > 0) {
+        const headers = []; if (colProducto) headers.push('Producto'); if (colCategoria) headers.push('Categoría'); if (colCantidad) headers.push('Cantidad'); if (colCPP) headers.push('CPP'); if (colPVP) headers.push('PVP'); if (colMargen) headers.push('Margen'); if (colValorCosto) headers.push('Valor Costo'); if (colValorVenta) headers.push('Valor Venta');
+        const body = inventario.map(p => { const cpp = p.cpp || calcularCPP(p.historial); const pvp = p.pvp || 0; const margen = calcularMargen(cpp, pvp); const row = []; if (colProducto) row.push(p.nombre); if (colCategoria) row.push(p.categoria); if (colCantidad) row.push(p.cantidad.toString()); if (colCPP) row.push(formatoMoneda(cpp)); if (colPVP) row.push(formatoMoneda(pvp)); if (colMargen) row.push(`${margen.toFixed(1)}%`); if (colValorCosto) row.push(formatoMoneda(p.cantidad * cpp)); if (colValorVenta) row.push(formatoMoneda(p.cantidad * pvp)); return row; });
+        doc.autoTable({ startY: y, head: [headers], body: body, theme: 'striped', headStyles: { fillColor: [59, 130, 246] }, styles: { fontSize: 7 } });
+    }
+    doc.save(`Inventario_${suc}_${fecha}.pdf`);
+    cerrarModalPDF();
+    alert('✅ PDF generado');
+};
+
+window.mostrarModalPDF = function() { if (inventario.length === 0) { alert('No hay productos'); return; } document.getElementById('modalPDF').classList.remove('hidden'); };
+window.cerrarModalPDF = function() { document.getElementById('modalPDF').classList.add('hidden'); };
+window.exportarExcel = function() { if (inventario.length === 0) { alert('No hay productos'); return; } let csv = "Producto,Categoría,Cantidad,Stock Mínimo,CPP,PVP,Margen %,Valor Costo,Valor Venta\n"; inventario.forEach(p => { const cpp = p.cpp || calcularCPP(p.historial); const pvp = p.pvp || 0; const margenPct = calcularMargen(cpp, pvp); csv += `"${p.nombre.replace(/"/g, '""')}",${p.categoria},${p.cantidad},${p.stockMin || 0},${cpp.toFixed(2)},${pvp.toFixed(2)},${margenPct.toFixed(1)},${(p.cantidad*cpp).toFixed(2)},${(p.cantidad*pvp).toFixed(2)}\n`; }); const blob = new Blob([csv], { type: 'text/csv' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `inventario_${new Date().toISOString().slice(0,10)}.csv`; link.click(); URL.revokeObjectURL(link.href); alert('✅ Excel descargado'); };
+window.exportarBackup = function() { const data = { inventario, categorias, sucursal: sucursalActual, fecha: new Date().toISOString() }; const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `backup_${new Date().toISOString().slice(0,10)}.json`; a.click(); URL.revokeObjectURL(a.href); alert('✅ Backup descargado'); };
+window.limpiarTodo = function() { if (confirm('⚠️ ¿ELIMINAR TODO?')) { inventario = []; guardarInventario(); alert('✅ Limpiado'); } };
+function guardarCategorias() { localStorage.setItem(STORAGE_CATS, JSON.stringify(categorias)); actualizarSelectCategorias(); refrescarTodo(); }
+function escapeHtml(s) { if (!s) return ''; return String(s).replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'); }
+cargarDatos();
+document.addEventListener('click', function(e) { if (!document.getElementById('buscador')?.contains(e.target)) document.getElementById('resultadosBusqueda').style.display = 'none'; });
+</script>
+</body>
+</html>
